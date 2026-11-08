@@ -22,6 +22,7 @@ class OpenCtpSetupBDD(unittest.TestCase):
                 self.assertIn(name, script)
         self.assertIn("RpcServiceApp", script)
         self.assertIn("tcp://trading.openctp.cn:30001", script)
+        self.assertIn('"柜台环境": "测试"', script)
 
     def test_given_a_windows_operator_when_launching_the_rpc_client_then_no_local_ctp_connection_is_required(self) -> None:
         script = (ROOT / "examples/client_server/run_windows_client.py").read_text(encoding="utf-8")
