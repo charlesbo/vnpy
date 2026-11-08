@@ -159,6 +159,8 @@ Install/front connectivity checks passed; no account login or orders were attemp
 | AppID/AuthCode | 官方页面说明无须填写 |
 | 行情和撮合 | 7x24 循环回放；部分成交测试使用 TEST/BTC/MINUS 等官方指定合约 |
 
+服务端启动配置显式使用 `"柜台环境": "测试"`。vn.py CTP Gateway 未提供该字段时默认选择“实盘”模式；模拟环境必须显式选择测试，防止 API 使用错误的运行模式。
+
 OpenCTP 页面说明模拟账号通过公众号注册，并可在那里注册更多 7x24/仿真账号、调整资金或重置账户。账号和密码不写入 Git、代码、文档或聊天消息。
 
 ### 4.2 设置凭据并启动

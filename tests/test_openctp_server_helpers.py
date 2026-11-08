@@ -34,6 +34,7 @@ class OpenCtpServerHelperTDD(unittest.TestCase):
         self.assertEqual(setting["密码"], "secret")
         self.assertEqual(setting["经纪商代码"], "9999")
         self.assertEqual(setting["交易服务器"], "tcp://trading.openctp.cn:30001")
+        self.assertEqual(setting["柜台环境"], "测试")
 
     def test_given_api_package_and_tts_labels_when_parsed_then_ctp_abi_version_is_normalized(self) -> None:
         self.assertEqual(parse_ctp_version("6.7.11.4"), "6.7.11")
