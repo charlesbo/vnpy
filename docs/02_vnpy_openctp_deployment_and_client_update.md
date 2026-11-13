@@ -258,9 +258,10 @@ loginctl enable-linger "$USER"
 - Python 版本与位数校验、不完整既有 venv 保留、pip 失败即停止。
 - OpenCTP 返回不支持市场的合约、空末条响应、查询失败时的初始化逻辑。
 - 无账户或无合约时不误报就绪、运行目录隔离、缺 locale 时启动前拒绝。
+- 动态库备份与版本检查使用明确的 Linux 平台条件；不支持的主机在访问安装文件前拒绝，运行目录检查兼容 Windows 长短路径。
 - 查询账户和合约后，订阅期货及期权并收到 RPC 推送；无订单调用。
 
-本机自动化验证 **48 项通过**，执行命令：
+本机自动化验证 **49 项通过**，执行命令：
 
 ```bash
 cd /home/chao/projs/worktrees/trd_opt_vnpy/vnpy-opt-setup
