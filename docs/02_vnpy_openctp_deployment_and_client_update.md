@@ -60,21 +60,21 @@ git clone --branch master --single-branch https://github.com/charlesbo/vnpy.git 
 cd C:\vnpy-opt
 ```
 
-### 2.2 准备 Python 3.11 64 位
+### 2.2 准备 Python 3.13 或 3.11 64 位
 
-已有 CPython 3.11 64 位时，可直接进入第 2.3 节。脚本会检测标准安装路径、注册表和 PATH，即使 Python 没加入 PATH 也能找到常规安装。
+如果你电脑上的 **Python 3.13.2 是 64 位 CPython，可以直接使用，不必再装 Python 3.11**。客户端安装脚本接受 CPython 3.13 或 3.11，优先检测 3.13；会检查解释器位数和版本，不依赖 `py` 命令。标准安装路径、注册表或 PATH 中均可查找。若当前 Python 是 32 位，或只有 Microsoft Store 的命令别名，脚本会拒绝该解释器；安装 Python 3.13 x64 官方安装版后再运行即可。
 
-尚未安装时，使用以下任一方式：
+如果电脑上没有这两个版本之一，推荐安装 Python 3.13 64 位：
 
 1. 若 PC 有 `winget`，执行：
 
    ```powershell
-   winget install --exact --id Python.Python.3.11 --architecture x64 --source winget
+   winget install --exact --id Python.Python.3.13 --architecture x64 --source winget
    ```
 
-2. 或打开 [Python 3.11.9 官方发布页](https://www.python.org/downloads/release/python-3119/)，选择 **Windows installer (64-bit)**，正常完成安装。3.11.9 是提供传统 Windows 安装器的最后一个 3.11 版本；不要选择嵌入式包或 32 位安装器。
+2. 或从 [Python 官方 Windows 下载页](https://www.python.org/downloads/windows/)安装 **CPython 3.13 64 位**。不要选择嵌入式包或 32 位安装器。
 
-安装后重新打开 PowerShell。若不用 PATH 或装在自定义目录，第 2.3 节支持直接指定 `python.exe` 的完整路径。
+安装后重新打开 PowerShell。若装在自定义目录，第 2.3 节支持直接指定 `python.exe` 完整路径。
 
 ### 2.3 一次性安装客户端环境
 
@@ -85,36 +85,47 @@ cd C:\vnpy-opt
 
 这个脚本会：
 
-- 查找并实际执行解释器，验证为 **CPython 3.11、64 位**，跳过 Microsoft Store 的命令别名。
+- 查找并实际执行解释器，验证为 **CPython 3.13 或 3.11、64 位**，跳过 Microsoft Store 的命令别名。
 - 创建或复用 `C:\vnpy-opt\.venv`；不兼容的既有环境会保留，并提示你检查。
-- 在该环境内升级 pip/wheel，执行 `pip install -e .`，安装 `vnpy_rpcservice==1.1.0`。
-- 执行 `pip check`，导入 Trader UI 和 RpcGateway，并核对 vn.py 来自本地源码目录。
+- 在该环境内升级 pip/wheel，执行 `pip install -e .`，安装 `vnpy_rpcservice==1.1.0`、`vnpy_optionmaster==1.3.0`、`vnpy_spreadtrading==1.4.0`。
+- 执行 `pip check`，导入 Trader UI、RPC、OptionMaster 和 SpreadTrading，并核对 vn.py 来自本地源码目录。
 
 如需指定 Python 的位置：
 
 ```powershell
-.\setup_client.bat -PythonPath "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe"
+.\setup_client.bat -PythonPath "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe"
 ```
 
 也可以把参数替换成你的实际路径，例如：
 
 ```powershell
-.\setup_client.bat -PythonPath "D:\Python311\python.exe"
+.\setup_client.bat -PythonPath "D:\Python313\python.exe"
 ```
 
 看到 `Client environment is ready` 后即可继续。脚本会在安装步骤失败时停止，不会带着未完成的环境启动界面。该脚本只在首次安装或依赖发生变化时执行。
 
-### 2.4 建立 SSH 隧道
+### 2.4 建立 SSH 隧道（内网或外网）
 
-服务端 RPC 仅在本机回环地址监听。Windows 使用 SSH 转发两个端口，无须对外开放原始 RPC：
+服务端 RPC 仅监听 `127.0.0.1`。Windows 先用 SSH 转发两个端口，Trader 始终只访问本机地址；不要把 `2014/4102` 直接暴露到公网。
+
+在同一局域网时，PowerShell 中执行：
 
 ```powershell
 ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L 127.0.0.1:2014:127.0.0.1:2014 -L 127.0.0.1:4102:127.0.0.1:4102 chao@192.168.20.221
 ```
 
-使用你获准的 Linux SSH 登录方式；首次连接核对服务器指纹。这一步使用的是 **Linux SSH 账户**，与 OpenCTP 账户分开。隧道窗口没有持续输出属于正常现象，保持窗口运行；关闭它会断开行情和交易链路。
+从外网连接时，先让 Linux 服务器和 Windows PC 都加入同一个获准的 VPN 网络。优先使用单位已有 VPN；也可以在两台设备安装 Tailscale 并登录到同一个 tailnet。Tailscale 默认从 `100.64.0.0/10` CGNAT 共享地址段分配 tailnet 地址。参见 [Tailscale IP 说明](https://tailscale.com/docs/concepts/tailscale-ip-addresses)、[Linux 安装说明](https://tailscale.com/docs/install/linux)和[Windows 安装说明](https://tailscale.com/docs/install/windows)。
 
-`192.168.20.221` 是本机局域网地址；异地 PC 需先接入可到达该服务器的 VPN，或把 SSH 目标替换成你已有的授权入口。当前仅验证本机 RPC 链路，尚未验证你的 Windows 到服务器的网络。Windows 需有 OpenSSH Client（可在系统“可选功能”中安装）。
+服务器加入 VPN 后，在 Linux 上用 `tailscale ip -4` 查看 VPN 地址。在 Windows 上确认两台设备在线，并用 VPN 地址建立隧道：
+
+```powershell
+$server = "100.x.y.z"  # 替换成 Linux 上 tailscale ip -4 的实际输出
+tailscale ping $server
+Test-NetConnection $server -Port 22
+ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -L 127.0.0.1:2014:127.0.0.1:2014 -L 127.0.0.1:4102:127.0.0.1:4102 "chao@$server"
+```
+
+若单位 VPN 已能路由到服务器，把 `$server` 换成 VPN 内的服务器地址即可。SSH 目标需要允许 Linux SSH 密钥登录；防火墙仅允许经过 VPN 的 SSH 访问。先确认 Windows 有 OpenSSH Client（Windows“可选功能”），首次连接核对服务器指纹。隧道窗口须保持打开，关闭会断开行情和交易链路。当前没有替你配置 VPN；外网到 Windows 的实际网络路径仍需按上面步骤验证。
 
 ### 2.5 启动客户端并连接
 
@@ -132,9 +143,19 @@ cd C:\vnpy-opt
 推送订阅地址：tcp://127.0.0.1:4102
 ```
 
-这里的 `127.0.0.1` 指 Windows 上 SSH 隧道的入口，SSH 会把请求传到 Linux 服务。连接完成后可查询合约，输入 `au2612`、交易所 `SHFE` 订阅期货行情；期权示例为 `au2612C1000`、`SHFE`。这些合约会随到期变化，之后请以客户端当日合约列表为准。
+这里的 `127.0.0.1` 指 Windows 上 SSH 隧道的入口，SSH 会把请求传到 Linux 服务。连接完成后先等日志显示合约信息查询成功。输入 `au2612`、交易所 `SHFE` 可订阅期货行情；期权示例为 `au2612C1000`、`SHFE`。这些合约会随到期变化，之后请以客户端当日合约列表为准。
 
-Windows 客户端只加载 RpcGateway，不持有 OpenCTP 密码；所有柜台连接都在 Linux 服务端。当前客户端是基础 Trader 界面，组合编辑等功能按后续需求迭代，不宣称已经实现完整的定制期权工作台。
+Windows 客户端加载 RpcGateway、OptionMaster 和 SpreadTrading，不持有 OpenCTP 密码；所有柜台连接都在 Linux 服务端。
+
+### 2.6 期权定价、手工交易与期货/期权组合
+
+连接 RPC 并完成合约查询后，在 Trader 的【功能】菜单打开【期权交易】（OptionMaster）。首轮配置按期权产品/期权链选择对应标的期货、年化利率及定价模型。模型要按具体合约规则选：欧式期货期权可用 Black-76，欧式股票/ETF 期权使用 Black-Scholes，美式商品期货期权可用二叉树模型（Binomial-Tree）；不能把一个模型机械套用到所有品种。之后可查看 T 型报价、理论价格和隐含波动率、波动率曲面、持仓 Greeks、情景压力测试，并用快速交易窗口手工发单。配置项见 [vn.py OptionMaster 使用说明](https://github.com/vnpy/vnpy/blob/master/docs/community/app/option_master.md)。
+
+本项目固定的 OptionMaster wheel 带有 Python 3.13 Windows 的 Cython 定价扩展；Python 3.11 没有对应扩展时会自动回退到纯 Python 定价实现（运行时会出现提示，计算功能仍可用）。你的 Python 3.13.2 因而也是推荐版本。CI 会分别验证三种模型均能返回价格和 Greeks。
+
+需要交易期权与期货组成的组合时，在【功能】菜单打开【价差交易】（SpreadTrading），创建自定义价差，把期权腿和期货腿按合约、买卖方向、比例和价差公式配置；先订阅各腿行情，确认价差报价正确，再使用手工价差交易。官方模块支持自定义价差、实时价差行情/持仓以及价差执行算法。它是按腿发送和管理委托的价差执行，不代表交易所原生原子组合单；一个腿部分成交、拒单或断线时，其他腿可能尚未成交，临时暴露单腿方向风险。先在 7x24 模拟环境逐腿验证撤单、部分成交、补腿和重启恢复，不能把“价差下单”视为不可拆分的一笔交易。见 [SpreadTrading 操作说明](https://github.com/vnpy/vnpy/blob/master/docs/community/app/spread_trading.md)。
+
+职责边界：OptionMaster 的模型、报价分析和 Greeks 计算在 Windows 客户端完成；服务器负责柜台连接和最终订单路由。当前 OpenCtpGateway 已向 RPC 发布国内期货/期权合约元数据（标的、行权价、到期日、看涨/看跌类型）、报价、持仓和账户数据，因此服务端不需要重复实现定价模型。客户端离线时这些界面与本地风险分析也会停止。服务器还没有按你的账户规模配置期权净敞口、最大单笔数量、最大活动委托等服务端风控值；这些数值会直接影响可下单范围，需按你的规则定义后再接真实账户。本轮仍只测试 7x24 模拟环境，没有验证下单成交。
 
 ## 3. 后续开发中的客户端更新
 
@@ -260,27 +281,31 @@ loginctl enable-linger "$USER"
 - 无账户或无合约时不误报就绪、运行目录隔离、缺 locale 时启动前拒绝。
 - 动态库备份与版本检查使用明确的 Linux 平台条件；不支持的主机在访问安装文件前拒绝，运行目录检查兼容 Windows 长短路径。
 - 查询账户和合约后，订阅期货及期权并收到 RPC 推送；无订单调用。
+- 客户端支持 Python 3.13 和 3.11，安装 OptionMaster/SpreadTrading，并将两个应用注册进 RPC Trader。
+- 内网 SSH 隧道及外网 VPN+SSH 方案、期权估值工具和多腿部分成交风险说明。
 
-本机自动化验证 **49 项通过**，执行命令：
+本机自动化验证 **54 项通过**，执行命令：
 
 ```bash
 cd /home/chao/projs/worktrees/trd_opt_vnpy/vnpy-opt-setup
-PWSH=/tmp/vnpy-bootstrap-pwsh/pwsh /home/chao/.venvs/vnpy-opt-setup/bin/python -m unittest tests.test_windows_client_bootstrap tests.test_openctp_server_helpers tests.test_openctp_gateway tests.test_openctp_readiness tests.test_vnpy_openctp_setup tests.test_vnpy_opt_setup_report -v
+PWSH=/tmp/vnpy-bootstrap-pwsh/pwsh /home/chao/.venvs/vnpy-opt-setup/bin/python -m unittest tests.test_windows_client_bootstrap tests.test_openctp_server_helpers tests.test_openctp_gateway tests.test_openctp_readiness tests.test_vnpy_openctp_setup tests.test_vnpy_opt_setup_report tests.test_options_client_workbench -v
 ```
 
-其中 PowerShell 流程单元测试在 Linux 上使用真实 PowerShell 7 和模拟 Python/pip 执行；另外，独立的 [Windows CI 验证已通过](https://github.com/charlesbo/vnpy/actions/runs/43370716264)，在 Windows runner 上实际执行了：
+其中 PowerShell 流程单元测试在 Linux 上使用真实 PowerShell 7 和模拟 Python/pip 执行。Windows CI 会分别在 CPython 3.11 和 3.13 runner 上真实安装 RPC、OptionMaster 与 SpreadTrading 依赖，并离屏打开/关闭注册这两款应用的 Trader 窗口；结果见 [Windows client setup 工作流](https://github.com/charlesbo/vnpy/actions/workflows/windows-client-setup.yml)。
 
-- 通过 cmd.exe/bat 调用 Windows PowerShell，使用 CPython 3.11 64 位安装真实依赖、editable core 和 RPC 组件。
-- `pip check`、源码位置校验、UI 与 RpcGateway 导入。
-- Qt Trader 主窗口及 RPC 网关离屏初始化与退出，不连接账户。
+- 通过 cmd.exe/bat 调用 Windows PowerShell，使用 CPython 3.11/3.13 64 位安装真实依赖和 editable core。
+- `pip check`、源码位置校验、UI、RpcGateway、OptionMaster 和 SpreadTrading 导入。
+- Qt Trader 主窗口及三项应用服务离屏初始化与退出，不连接账户、不发订单。
 
 对应工作流是 [Windows client setup](../.github/workflows/windows-client-setup.yml)。这证明安装和界面初始化能在 Windows 环境运行；你的 PC 仍需按第 2 节完成 SSH 隧道和远端连接，以确认实际网络、桌面显示和操作效果。OpenCTP 模拟下单、成交、多腿执行和客户端断线恢复仍需单独验收。
 
 ## 7. 官方资料
 
-- [Python 3.11 Windows 安装说明](https://docs.python.org/3.11/using/windows.html)
-- [Python 3.11.9 Windows 安装器](https://www.python.org/downloads/release/python-3119/)
+- [Python Windows 安装说明](https://docs.python.org/3/using/windows.html)
+- [Python Windows 下载页](https://www.python.org/downloads/windows/)
 - [OpenCTP 模拟环境](http://www.openctp.cn/Trading.html)
 - [OpenCTP TTS 接口说明](http://www.openctp.cn/TTS-CTPAPI.html)
 - [vn.py CTP 网关](https://github.com/vnpy/vnpy_ctp)
 - [vn.py RPC 服务](https://github.com/vnpy/vnpy_rpcservice)
+- [vn.py OptionMaster](https://github.com/vnpy/vnpy_optionmaster)
+- [vn.py SpreadTrading](https://github.com/vnpy/vnpy_spreadtrading)

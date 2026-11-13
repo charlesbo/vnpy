@@ -2,16 +2,16 @@ Feature: First-time Windows client setup without the optional Python launcher
   The trader can prepare a source checkout even when the py command is absent.
 
   Scenario: An existing CPython is discovered without py
-    Given CPython 3.11 64-bit is installed in a standard user directory or PATH
+    Given CPython 3.11 or 3.13 64-bit is installed in a standard user directory or PATH
     And the py launcher is absent
     When the trader runs setup_client.bat from the checkout
     Then the interpreter version and architecture are validated at runtime
     And the checkout is installed editable into its dedicated .venv
-    And RpcGateway dependencies are installed at the verified version
+    And RPC, OptionMaster, and SpreadTrading packages are installed at pinned versions
     And the trader is told how to start update_client.bat
 
   Scenario: Python is not installed
-    Given no compatible CPython 3.11 64-bit interpreter can be found
+    Given no compatible CPython 3.11 or 3.13 64-bit interpreter can be found
     When the trader runs setup_client.bat
     Then setup fails before creating or changing the virtual environment
     And it gives an official Python installer URL and a specific winget command

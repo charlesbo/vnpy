@@ -99,6 +99,8 @@ class WindowsClientBootstrapBDD(unittest.TestCase):
         self.assertTrue(any(call["args"][:2] == ["-m", "venv"] for call in calls))
         self.assertTrue(any(call["args"][:4] == ["-m", "pip", "install", "-e"] and call["args"][4] == str(self.repo) for call in calls))
         self.assertTrue(any("vnpy_rpcservice==1.1.0" in call["args"] for call in calls))
+        self.assertTrue(any("vnpy_optionmaster==1.3.0" in call["args"] for call in calls))
+        self.assertTrue(any("vnpy_spreadtrading==1.4.0" in call["args"] for call in calls))
         self.assertTrue(all(call["cwd"] == str(self.repo) for call in calls))
         self.assertFalse(any(any(arg.endswith("run_windows_client.py") for arg in call["args"]) for call in calls))
         self.assertIn("update_client.bat", result.stdout)
@@ -106,6 +108,16 @@ class WindowsClientBootstrapBDD(unittest.TestCase):
     def test_given_no_py_launcher_when_python_is_in_its_standard_user_location_then_setup_finds_it(self) -> None:
         self.env["LOCALAPPDATA"] = str(self.base / "local app data")
         python = self.fake_python(Path(self.env["LOCALAPPDATA"]) / "Programs/Python/Python311/python.exe")
+        result = self.run_setup()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.calls()[0]["exe"], str(python))
+
+    def test_given_existing_python_313_when_setup_runs_then_no_311_installation_is_required(self) -> None:
+        self.env["LOCALAPPDATA"] = str(self.base / "local app data")
+        python = self.fake_python(
+            Path(self.env["LOCALAPPDATA"]) / "Programs/Python/Python313/python.exe",
+            version=(3, 13),
+        )
         result = self.run_setup()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.calls()[0]["exe"], str(python))
@@ -121,7 +133,7 @@ class WindowsClientBootstrapBDD(unittest.TestCase):
         python = self.fake_python(self.base / "wrong/python.exe", version=(3, 12))
         result = self.run_setup(python)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("CPython 3.11", result.stdout + result.stderr)
+        self.assertIn("CPython 3.11 or 3.13", result.stdout + result.stderr)
         self.assertFalse((self.repo / ".venv").exists())
         self.assertEqual(len(self.calls()), 1)
 
@@ -136,8 +148,8 @@ class WindowsClientBootstrapBDD(unittest.TestCase):
         result = self.run_setup()
         output = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("https://www.python.org/downloads/release/python-3119/", output)
-        self.assertIn("winget install --exact --id Python.Python.3.11 --architecture x64", output)
+        self.assertIn("https://www.python.org/downloads/windows/", output)
+        self.assertIn("winget install --exact --id Python.Python.3.13 --architecture x64", output)
         self.assertFalse((self.repo / ".venv").exists())
         self.assertEqual(self.calls(), [])
 
