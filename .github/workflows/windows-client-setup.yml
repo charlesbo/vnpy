@@ -42,12 +42,14 @@ jobs:
           import tempfile
           from pathlib import Path
 
+          original_cwd = os.getcwd()
           with tempfile.TemporaryDirectory() as directory:
               os.chdir(directory)
               Path('.vntrader').mkdir()
               from vnpy.event import EventEngine
               from vnpy.trader.engine import MainEngine
               from vnpy.trader.ui import MainWindow, create_qapp, QtCore
+              from vnpy.trader.logger import logger
               from vnpy_rpcservice import RpcGateway
 
               app = create_qapp()
@@ -62,6 +64,8 @@ jobs:
                   print('PASS: Windows Trader window and RPC gateway initialized without credentials.')
               finally:
                   engine.close()
+                  logger.remove()
+                  os.chdir(original_cwd)
           '@
           & .\.venv\Scripts\python.exe -c $smoke
           if ($LASTEXITCODE -ne 0) { throw 'Windows GUI smoke failed' }
