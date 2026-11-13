@@ -28,6 +28,9 @@ class OptionsClientWorkbenchBDD(unittest.TestCase):
                 self.assertIn(phrase, script)
         self.assertNotIn("CtpGateway", script)
 
+        workflow = (ROOT / ".github/workflows/windows-client-setup.yml").read_text(encoding="utf-8")
+        self.assertIn("assert app_names == {'OptionMaster', 'SpreadTrading'}", workflow)
+
     def test_given_an_external_network_when_connection_is_documented_then_rpc_stays_private(self) -> None:
         report = (ROOT / "docs/02_vnpy_openctp_deployment_and_client_update.md").read_text(encoding="utf-8")
         for phrase in (

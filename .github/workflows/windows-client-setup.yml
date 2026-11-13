@@ -72,7 +72,7 @@ jobs:
                   engine.add_app(OptionMasterApp)
                   engine.add_app(SpreadTradingApp)
                   app_names = {item.app_name for item in engine.get_all_apps()}
-                  assert app_names == {"OptionMaster", "SpreadTrading"}, app_names
+                  assert app_names == {'OptionMaster', 'SpreadTrading'}, app_names
                   window = MainWindow(engine, engine.event_engine)
                   window.show()
                   assert window.isVisible()
