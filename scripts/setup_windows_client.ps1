@@ -2,20 +2,18 @@
 .SYNOPSIS
 Prepare the Windows RPC client from this source checkout, without py.exe.
 .DESCRIPTION
-Uses an existing CPython 3.11 64-bit installation. No system Python installer is
+Uses an existing CPython 3.11 or 3.13 64-bit installation. No system installer is
 downloaded or run. Existing incompatible/incomplete virtual environments are
 left untouched. Run once, or again only when Python dependencies change.
 .PARAMETER PythonPath
-Optional full path to an existing CPython 3.11 64-bit python.exe. Quote paths
+Optional full path to an existing CPython 3.11 or 3.13 64-bit python.exe. Quote paths
 containing spaces. An explicit incompatible path fails instead of falling back.
 .EXAMPLE
 .\setup_client.bat
 .EXAMPLE
-.\setup_client.bat -PythonPath "C:\Users\Trader\AppData\Local\Programs\Python\Python311\python.exe"
+.\setup_client.bat -PythonPath "C:\Users\Trader\AppData\Local\Programs\Python\Python313\python.exe"
 .LINK
-https://docs.python.org/3.11/using/windows.html
-.LINK
-https://www.python.org/downloads/release/python-3119/
+https://docs.python.org/3/using/windows.html
 #>
 [CmdletBinding()]
 param([string]$PythonPath = "")
@@ -48,7 +46,7 @@ function Get-CompatiblePython {
             return $null
         }
         $runtime = $output[-1] | ConvertFrom-Json
-        if ($runtime.implementation -ne "cpython" -or $runtime.version[0] -ne 3 -or $runtime.version[1] -ne 11 -or $runtime.bits -ne 64) {
+        if ($runtime.implementation -ne "cpython" -or $runtime.version[0] -ne 3 -or $runtime.version[1] -notin @(11, 13) -or $runtime.bits -ne 64) {
             return $null
         }
         return [pscustomobject]@{ Executable = $resolved; Runtime = $runtime }
@@ -61,38 +59,42 @@ function Get-CompatiblePython {
 function Find-CompatiblePython {
     $candidates = New-Object 'System.Collections.Generic.List[string]'
 
-    if ($env:LOCALAPPDATA) {
-        $candidates.Add((Join-Path $env:LOCALAPPDATA 'Programs\Python\Python311\python.exe'))
-    }
-    if ($env:ProgramFiles) {
-        $candidates.Add((Join-Path $env:ProgramFiles 'Python311\python.exe'))
-    }
-    if ($env:ProgramW6432) {
-        $candidates.Add((Join-Path $env:ProgramW6432 'Python311\python.exe'))
-    }
-    if ($env:SystemDrive) {
-        $candidates.Add((Join-Path ($env:SystemDrive + '\') 'Python311\python.exe'))
+    foreach ($version in @('313', '311')) {
+        if ($env:LOCALAPPDATA) {
+            $candidates.Add((Join-Path $env:LOCALAPPDATA "Programs\Python\Python$version\python.exe"))
+        }
+        if ($env:ProgramFiles) {
+            $candidates.Add((Join-Path $env:ProgramFiles "Python$version\python.exe"))
+        }
+        if ($env:ProgramW6432) {
+            $candidates.Add((Join-Path $env:ProgramW6432 "Python$version\python.exe"))
+        }
+        if ($env:SystemDrive) {
+            $candidates.Add((Join-Path ($env:SystemDrive + '\') "Python$version\python.exe"))
+        }
     }
 
     # Official installers register their location even when PATH was not changed.
     foreach ($hive in @('HKCU', 'HKLM')) {
         if (Get-PSDrive -Name $hive -ErrorAction SilentlyContinue) {
-            $key = $hive + ':\Software\Python\PythonCore\3.11\InstallPath'
-            if (Test-Path -LiteralPath $key) {
-                $location = Get-Item -LiteralPath $key
-                $registeredExe = $location.GetValue('ExecutablePath')
-                $registeredDir = $location.GetValue('')
-                if ($registeredExe) {
-                    $candidates.Add([string]$registeredExe)
-                }
-                if ($registeredDir) {
-                    $candidates.Add((Join-Path ([string]$registeredDir) 'python.exe'))
+            foreach ($version in @('3.13', '3.11')) {
+                $key = $hive + ':\Software\Python\PythonCore\' + $version + '\InstallPath'
+                if (Test-Path -LiteralPath $key) {
+                    $location = Get-Item -LiteralPath $key
+                    $registeredExe = $location.GetValue('ExecutablePath')
+                    $registeredDir = $location.GetValue('')
+                    if ($registeredExe) {
+                        $candidates.Add([string]$registeredExe)
+                    }
+                    if ($registeredDir) {
+                        $candidates.Add((Join-Path ([string]$registeredDir) 'python.exe'))
+                    }
                 }
             }
         }
     }
 
-    foreach ($name in @('python.exe', 'python3.exe', 'python3.11.exe', 'python', 'python3', 'python3.11')) {
+    foreach ($name in @('python.exe', 'python3.exe', 'python3.13.exe', 'python3.11.exe', 'python', 'python3', 'python3.13', 'python3.11')) {
         foreach ($command in @(Get-Command -Name $name -CommandType Application -All -ErrorAction SilentlyContinue)) {
             $candidates.Add($command.Source)
         }
@@ -107,16 +109,16 @@ function Find-CompatiblePython {
 }
 
 function Show-PythonInstallHelp {
-    Write-Host 'No compatible CPython 3.11 64-bit installation was found.'
+    Write-Host 'No compatible CPython 3.11 or 3.13 64-bit installation was found.'
     Write-Host 'Install Python yourself using ONE of these methods, then rerun setup_client.bat:'
-    Write-Host '  Official installer: https://www.python.org/downloads/release/python-3119/'
-    Write-Host '  Choose Windows installer (64-bit). Python 3.11.9 is the last 3.11 release with this Windows installer.'
+    Write-Host '  Official installers: https://www.python.org/downloads/windows/'
+    Write-Host '  Choose a CPython 3.13 or 3.11 Windows installer (64-bit).'
     Write-Host '  Or, if winget is available:'
-    Write-Host '    winget install --exact --id Python.Python.3.11 --architecture x64'
+    Write-Host '    winget install --exact --id Python.Python.3.13 --architecture x64'
     Write-Host 'A Python launcher (py.exe) and changing PATH are optional for this script.'
     Write-Host 'For a custom location:'
-    Write-Host '  .\setup_client.bat -PythonPath "C:\path\to\Python311\python.exe"'
-    Write-Host 'Official Windows documentation: https://docs.python.org/3.11/using/windows.html'
+    Write-Host '  .\setup_client.bat -PythonPath "C:\path\to\Python313\python.exe"'
+    Write-Host 'Official Windows documentation: https://docs.python.org/3/using/windows.html'
 }
 
 function Invoke-CheckedPython {
@@ -141,7 +143,7 @@ try {
         if (-not [string]::IsNullOrWhiteSpace($PythonPath)) {
             $explicitPython = Get-CompatiblePython -Executable $PythonPath
             if ($null -eq $explicitPython) {
-                throw 'PythonPath must point to a working CPython 3.11 64-bit python.exe. No packages were installed.'
+                throw 'PythonPath must point to a working CPython 3.11 or 3.13 64-bit python.exe. No packages were installed.'
             }
         }
 
@@ -158,7 +160,7 @@ try {
         if (Test-Path -LiteralPath $venvDir) {
             $existingPython = Get-CompatiblePython -Executable $venvPython
             if ($null -eq $existingPython) {
-                throw 'The existing .venv is incomplete or is not CPython 3.11 64-bit. It was not replaced. Close the client, inspect/back up the environment, and move it aside before retrying.'
+                throw 'The existing .venv is incomplete or is not CPython 3.11 or 3.13 64-bit. It was not replaced. Close the client, inspect/back up the environment, and move it aside before retrying.'
             }
             Write-Host "Reusing $venvPython"
         }
@@ -169,7 +171,7 @@ try {
             }
             if ($null -eq $basePython) {
                 Show-PythonInstallHelp
-                throw 'Install CPython 3.11 64-bit, then rerun setup_client.bat.'
+                throw 'Install CPython 3.13 or 3.11 64-bit, then rerun setup_client.bat.'
             }
             Write-Host "Creating .venv with $($basePython.Executable)"
             Invoke-CheckedPython -Executable $basePython.Executable -PythonArguments @('-m', 'venv', $venvDir)
@@ -180,11 +182,11 @@ try {
 
         Invoke-CheckedPython -Executable $venvPython -PythonArguments @('-m', 'pip', 'install', '--upgrade', 'pip', 'wheel')
         Invoke-CheckedPython -Executable $venvPython -PythonArguments @('-m', 'pip', 'install', '-e', $repoRoot)
-        Invoke-CheckedPython -Executable $venvPython -PythonArguments @('-m', 'pip', 'install', 'vnpy_rpcservice==1.1.0')
+        Invoke-CheckedPython -Executable $venvPython -PythonArguments @('-m', 'pip', 'install', 'vnpy_rpcservice==1.1.0', 'vnpy_optionmaster==1.3.0', 'vnpy_spreadtrading==1.4.0')
         Invoke-CheckedPython -Executable $venvPython -PythonArguments @('-m', 'pip', 'check')
 
         # Import GUI classes without constructing a QApplication or starting Trader.
-        $smoke = "import pathlib,sys; import vnpy; from vnpy.trader.ui import MainWindow; from vnpy_rpcservice import RpcGateway; assert pathlib.Path(vnpy.__file__).resolve().is_relative_to(pathlib.Path(sys.argv[1]).resolve()), 'vnpy is not importing from this editable checkout'; print('Verified vnpy UI and RpcGateway imports from the editable checkout.')"
+        $smoke = "import math,pathlib,sys; import vnpy; from vnpy.trader.ui import MainWindow; from vnpy_rpcservice import RpcGateway; from vnpy_optionmaster import OptionMasterApp; from vnpy_optionmaster.engine import PRICING_MODELS; from vnpy_spreadtrading import SpreadTradingApp; results=[model.calculate_greeks(100.0,100.0,0.02,0.5,0.25,1) for model in PRICING_MODELS.values()]; assert len(results) == 3 and all(len(values) == 5 and values[0] > 0 and all(math.isfinite(float(value)) for value in values) for values in results), 'OptionMaster pricing/Greeks failed'; assert pathlib.Path(vnpy.__file__).resolve().is_relative_to(pathlib.Path(sys.argv[1]).resolve()), 'vnpy is not importing from this editable checkout'; print('Verified Trader UI, RPC, OptionMaster pricing models, and SpreadTrading imports from the editable checkout.')"
         Invoke-CheckedPython -Executable $venvPython -PythonArguments @('-c', $smoke, $repoRoot)
 
         Write-Host 'Client environment is ready. No GUI was launched.'

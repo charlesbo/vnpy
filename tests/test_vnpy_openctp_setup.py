@@ -54,7 +54,8 @@ class OpenCtpSetupBDD(unittest.TestCase):
 
     def test_given_windows_without_the_python_launcher_when_following_current_instructions_then_py_is_not_required(self) -> None:
         self.assertNotIn("py -3.11", self.report)
-        self.assertIn("Python.Python.3.11", self.report)
+        self.assertIn("Python.Python.3.13", self.report)
+        self.assertIn("Python 3.13.2", self.report)
         self.assertIn("-PythonPath", self.report)
         self.assertNotIn("本机没有 OpenCTP", self.report)
 

@@ -18,11 +18,16 @@ jobs:
   install-client:
     runs-on: windows-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    name: Install and smoke test Python ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
           architecture: x64
           cache: pip
 
@@ -39,6 +44,7 @@ jobs:
         run: |
           $smoke = @'
           import os
+          import math
           import tempfile
           from pathlib import Path
 
@@ -51,11 +57,22 @@ jobs:
               from vnpy.trader.ui import MainWindow, create_qapp, QtCore
               from vnpy.trader.logger import logger
               from vnpy_rpcservice import RpcGateway
+              from vnpy_optionmaster import OptionMasterApp
+              from vnpy_optionmaster.engine import PRICING_MODELS
+              from vnpy_spreadtrading import SpreadTradingApp
+
+              results = [model.calculate_greeks(100.0, 100.0, 0.02, 0.5, 0.25, 1) for model in PRICING_MODELS.values()]
+              assert len(results) == 3
+              assert all(len(values) == 5 and values[0] > 0 and all(math.isfinite(float(value)) for value in values) for values in results)
 
               app = create_qapp()
               engine = MainEngine(EventEngine())
               try:
                   engine.add_gateway(RpcGateway)
+                  engine.add_app(OptionMasterApp)
+                  engine.add_app(SpreadTradingApp)
+                  app_names = {item.app_name for item in engine.get_all_apps()}
+                  assert app_names == {"OptionMaster", "SpreadTrading"}, app_names
                   window = MainWindow(engine, engine.event_engine)
                   window.show()
                   assert window.isVisible()
