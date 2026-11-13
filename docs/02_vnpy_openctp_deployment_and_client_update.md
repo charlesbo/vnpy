@@ -35,7 +35,7 @@ OpenCTP 7x24 是历史行情循环回放和模拟撮合环境，报价时间可�
 - 通过 RPC 订阅并收到 `au2612.SHFE` 和 `au2612C1000.SHFE` 的推送报价，期货和期权两条行情链路均通过。
 - 重启 systemd 服务后，重新登录、合约查询、账户查询及两条行情推送复验通过。
 - 本次只执行登录、查询、订阅，**未提交或撤销任何订单**；成交及组合执行能力另行验收。
-- Windows 安装脚本已执行 PowerShell 流程测试；实际 Windows PC 的安装、Qt 界面、SSH 网络与操作效果仍由下面步骤验收。
+- Windows 安装脚本已在 GitHub Windows runner 上通过真实 Windows PowerShell/bat 安装验证；Qt Trader 窗口离屏启动也通过。你的 PC 到本机服务器的 SSH 网络与实际界面操作按下面步骤验收。
 
 服务端已加入本项目专用 `OpenCtpGateway` 适配层，只接收中金所、上期所、郑商所、大商所、能源中心、广期所的期货和期权合约；OpenCTP 返回的其他市场合约会被过滤，查询最后一条被过滤时也能正确完成初始化。
 
@@ -267,7 +267,13 @@ cd /home/chao/projs/worktrees/trd_opt_vnpy/vnpy-opt-setup
 PWSH=/tmp/vnpy-bootstrap-pwsh/pwsh /home/chao/.venvs/vnpy-opt-setup/bin/python -m unittest tests.test_windows_client_bootstrap tests.test_openctp_server_helpers tests.test_openctp_gateway tests.test_openctp_readiness tests.test_vnpy_openctp_setup tests.test_vnpy_opt_setup_report -v
 ```
 
-PowerShell 流程测试在 Linux 上使用真实 PowerShell 7 和模拟 Python/pip 执行；它验证脚本控制逻辑，不代替真实 Windows PowerShell 5.1、cmd.exe、依赖下载或 GUI 测试。Windows 端按第 2 节完成安装和连接后，才能确认该 PC 的端到端效果。OpenCTP 模拟下单、成交、多腿执行和故障恢复仍需单独验收。
+其中 PowerShell 流程单元测试在 Linux 上使用真实 PowerShell 7 和模拟 Python/pip 执行；另外，独立的 [Windows CI 验证已通过](https://github.com/charlesbo/vnpy/actions/runs/43370716264)，在 Windows runner 上实际执行了：
+
+- 通过 cmd.exe/bat 调用 Windows PowerShell，使用 CPython 3.11 64 位安装真实依赖、editable core 和 RPC 组件。
+- `pip check`、源码位置校验、UI 与 RpcGateway 导入。
+- Qt Trader 主窗口及 RPC 网关离屏初始化与退出，不连接账户。
+
+对应工作流是 [Windows client setup](../.github/workflows/windows-client-setup.yml)。这证明安装和界面初始化能在 Windows 环境运行；你的 PC 仍需按第 2 节完成 SSH 隧道和远端连接，以确认实际网络、桌面显示和操作效果。OpenCTP 模拟下单、成交、多腿执行和客户端断线恢复仍需单独验收。
 
 ## 7. 官方资料
 
