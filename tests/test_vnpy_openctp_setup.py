@@ -41,14 +41,22 @@ class OpenCtpSetupBDD(unittest.TestCase):
             "tcp://trading.openctp.cn:30001",
             "tcp://trading.openctp.cn:30011",
             "TTS",
-            "公众号",
-            "pip install -e .",
+            "setup_client.bat",
             "git pull --ff-only origin master",
             "update_client.bat",
-            "未登录",
+            "已登录",
+            "27024",
+            "ssh -N",
+            "systemctl --user",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.report)
+
+    def test_given_windows_without_the_python_launcher_when_following_current_instructions_then_py_is_not_required(self) -> None:
+        self.assertNotIn("py -3.11", self.report)
+        self.assertIn("Python.Python.3.11", self.report)
+        self.assertIn("-PythonPath", self.report)
+        self.assertNotIn("本机没有 OpenCTP", self.report)
 
     def test_given_branch_cleanup_when_changes_are_merged_then_instructions_use_master(self) -> None:
         self.assertIn("master", self.report)
