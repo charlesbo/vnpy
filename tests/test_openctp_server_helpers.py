@@ -24,7 +24,7 @@ class OpenCtpServerHelperTDD(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             try:
                 prepare_runtime_directory(Path(temp_dir) / "service")
-                self.assertEqual(Path.cwd(), Path(temp_dir) / "service")
+                self.assertTrue(Path.cwd().samefile(Path(temp_dir) / "service"))
                 self.assertTrue((Path.cwd() / ".vntrader").is_dir())
             finally:
                 os.chdir(original_cwd)
@@ -81,7 +81,9 @@ class OpenCtpServerHelperTDD(unittest.TestCase):
         self.assertEqual(parse_ctp_version("6.7.11.4"), "6.7.11")
         self.assertEqual(parse_ctp_version("TTS 6.7.11"), "6.7.11")
 
-    def test_given_a_matching_tts_archive_when_installed_then_original_ctp_libraries_are_backed_up(self) -> None:
+    @patch("scripts.install_openctp_tts_api.platform.system", return_value="Linux")
+    @patch("scripts.install_openctp_tts_api.platform.machine", return_value="x86_64")
+    def test_given_a_matching_tts_archive_when_installed_then_original_ctp_libraries_are_backed_up(self, *_platform_mocks) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             archive_path = root / "tts_6.7.11.zip"
@@ -94,7 +96,8 @@ class OpenCtpServerHelperTDD(unittest.TestCase):
             for name in ("libthostmduserapi_se.so", "libthosttraderapi_se.so"):
                 (api_dir / name).write_bytes(b"original official library")
 
-            sdk_version, libraries = locate_sdk_libraries(zipfile.ZipFile(archive_path))
+            with zipfile.ZipFile(archive_path) as archive:
+                sdk_version, libraries = locate_sdk_libraries(archive)
             self.assertEqual(sdk_version, "6.7.11")
             self.assertEqual(len(libraries), 2)
 
@@ -104,7 +107,9 @@ class OpenCtpServerHelperTDD(unittest.TestCase):
                 self.assertIn(b"openctp-tts v6.7.11", (api_dir / name).read_bytes())
                 self.assertEqual((api_dir / f"{name}.official.bak").read_bytes(), b"original official library")
 
-    def test_given_a_different_tts_api_version_when_installing_then_original_libraries_remain_untouched(self) -> None:
+    @patch("scripts.install_openctp_tts_api.platform.system", return_value="Linux")
+    @patch("scripts.install_openctp_tts_api.platform.machine", return_value="x86_64")
+    def test_given_a_different_tts_api_version_when_installing_then_original_libraries_remain_untouched(self, *_platform_mocks) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             archive_path = root / "tts_6.7.10.zip"
@@ -123,6 +128,18 @@ class OpenCtpServerHelperTDD(unittest.TestCase):
             for name in ("libthostmduserapi_se.so", "libthosttraderapi_se.so"):
                 self.assertEqual((api_dir / name).read_bytes(), b"original official library")
                 self.assertFalse((api_dir / f"{name}.official.bak").exists())
+
+    def test_given_an_unsupported_host_when_installing_linux_libraries_then_no_files_are_accessed(self) -> None:
+        for system, machine in (("Windows", "AMD64"), ("Linux", "aarch64")):
+            with self.subTest(system=system, machine=machine):
+                with (
+                    patch("scripts.install_openctp_tts_api.platform.system", return_value=system),
+                    patch("scripts.install_openctp_tts_api.platform.machine", return_value=machine),
+                    patch("scripts.install_openctp_tts_api.zipfile.ZipFile") as archive,
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "only x86_64 Linux"):
+                        install_libraries(Path("unused.zip"), Path("unused-api"), installed_version="6.7.11.4")
+                    archive.assert_not_called()
 
     def test_given_matching_tts_libraries_when_checked_then_version_is_verified(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
