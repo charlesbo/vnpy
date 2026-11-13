@@ -5,11 +5,52 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-from examples.client_server.run_openctp_server import build_ctp_setting, build_rpc_addresses, check_tts_libraries, parse_endpoint
+from examples.client_server.run_openctp_server import (
+    build_ctp_setting, build_rpc_addresses, check_tts_libraries, parse_endpoint,
+    prepare_runtime_directory, get_server_status,
+    check_ctp_locale,
+)
 from scripts.install_openctp_tts_api import install_libraries, locate_sdk_libraries, parse_ctp_version
 
 
 class OpenCtpServerHelperTDD(unittest.TestCase):
+    def test_given_a_missing_chinese_locale_when_checked_then_startup_fails_before_native_callbacks(self) -> None:
+        with patch("locale.setlocale", side_effect=__import__("locale").Error("unsupported locale")):
+            with self.assertRaisesRegex(RuntimeError, "zh_CN.GB18030"):
+                check_ctp_locale()
+
+    def test_given_a_service_runtime_directory_when_prepared_then_state_is_isolated(self) -> None:
+        original_cwd = Path.cwd()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            try:
+                prepare_runtime_directory(Path(temp_dir) / "service")
+                self.assertEqual(Path.cwd(), Path(temp_dir) / "service")
+                self.assertTrue((Path.cwd() / ".vntrader").is_dir())
+            finally:
+                os.chdir(original_cwd)
+
+    def test_given_a_connected_gateway_without_contracts_when_checked_then_it_is_not_ready(self) -> None:
+        from types import SimpleNamespace
+        engine = SimpleNamespace(get_all_contracts=lambda: [], get_all_ticks=lambda: [], get_all_accounts=lambda: [])
+        gateway = SimpleNamespace(
+            td_api=SimpleNamespace(login_status=True, contract_inited=False),
+            md_api=SimpleNamespace(login_status=True),
+        )
+        status = get_server_status(engine, gateway)
+        self.assertFalse(status["ready"])
+        self.assertNotIn("password", status)
+
+    def test_given_logged_in_apis_and_contracts_when_checked_then_status_is_ready(self) -> None:
+        from types import SimpleNamespace
+        engine = SimpleNamespace(get_all_contracts=lambda: [object()], get_all_ticks=lambda: [], get_all_accounts=lambda: [object()])
+        gateway = SimpleNamespace(
+            td_api=SimpleNamespace(login_status=True, contract_inited=True),
+            md_api=SimpleNamespace(login_status=True),
+        )
+        status = get_server_status(engine, gateway)
+        self.assertTrue(status["ready"])
+        self.assertEqual(status["contracts"], 1)
+
     def test_given_a_tcp_front_when_parsed_then_hostname_and_port_are_returned(self) -> None:
         self.assertEqual(parse_endpoint("tcp://trading.openctp.cn:30001"), ("trading.openctp.cn", 30001))
 

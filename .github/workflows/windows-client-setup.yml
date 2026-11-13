@@ -1,0 +1,71 @@
+name: Windows client setup
+
+on:
+  push:
+    branches: [master, vnpy-opt-setup]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-client-setup-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install-client:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: x64
+          cache: pip
+
+      - name: Run the first-time installer through cmd.exe
+        shell: powershell
+        run: |
+          & .\setup_client.bat -PythonPath "$env:pythonLocation\python.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows client setup failed' }
+
+      - name: Open and close the RPC client window without a server
+        shell: powershell
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $smoke = @'
+          import os
+          import tempfile
+          from pathlib import Path
+
+          original_cwd = os.getcwd()
+          with tempfile.TemporaryDirectory() as directory:
+              os.chdir(directory)
+              Path('.vntrader').mkdir()
+              from vnpy.event import EventEngine
+              from vnpy.trader.engine import MainEngine
+              from vnpy.trader.ui import MainWindow, create_qapp, QtCore
+              from vnpy.trader.logger import logger
+              from vnpy_rpcservice import RpcGateway
+
+              app = create_qapp()
+              engine = MainEngine(EventEngine())
+              try:
+                  engine.add_gateway(RpcGateway)
+                  window = MainWindow(engine, engine.event_engine)
+                  window.show()
+                  assert window.isVisible()
+                  QtCore.QTimer.singleShot(1000, app.exit)
+                  app.exec()
+                  print('PASS: Windows Trader window and RPC gateway initialized without credentials.')
+              finally:
+                  engine.close()
+                  logger.remove()
+                  os.chdir(original_cwd)
+          '@
+          & .\.venv\Scripts\python.exe -c $smoke
+          if ($LASTEXITCODE -ne 0) { throw 'Windows GUI smoke failed' }

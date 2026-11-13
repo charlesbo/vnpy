@@ -2,6 +2,7 @@
 
 import argparse
 import importlib.metadata
+import locale
 import logging
 import os
 import re
@@ -10,11 +11,22 @@ import socket
 import tempfile
 from pathlib import Path
 from threading import Event
+from typing import Any
 
 LOGGER = logging.getLogger("openctp_server")
 OPENCTP_TD_DEFAULT = "tcp://trading.openctp.cn:30001"
 OPENCTP_MD_DEFAULT = "tcp://trading.openctp.cn:30011"
 RPC_PORTS = (2014, 4102)
+
+
+def check_ctp_locale() -> None:
+    """Fail before native callbacks if their required Chinese locale is unavailable."""
+    try:
+        original = locale.setlocale(locale.LC_CTYPE)
+        locale.setlocale(locale.LC_CTYPE, "zh_CN.GB18030")
+        locale.setlocale(locale.LC_CTYPE, original)
+    except locale.Error as exc:
+        raise RuntimeError("Install zh_CN.GB18030 or configure LOCPATH before starting the CTP gateway") from exc
 
 
 def parse_endpoint(endpoint: str) -> tuple[str, int]:
@@ -71,6 +83,7 @@ def check_tts_api_runtime(ctp_version: str) -> None:
 
 def check_installation() -> int:
     """Check native gateway imports and public OpenCTP front connectivity."""
+    check_ctp_locale()
     import vnpy
     import vnpy_ctp
     import vnpy_rpcservice
@@ -89,7 +102,7 @@ def check_installation() -> int:
     return 0
 
 
-def log_event(event: object) -> None:
+def log_event(event: Any) -> None:
     """Write gateway and RPC events to stdout without exposing credentials."""
     log = event.data
     LOGGER.info("%s %s", log.time, log.msg)
@@ -122,6 +135,32 @@ def build_rpc_addresses(bind_ip: str) -> tuple[str, str]:
     return f"tcp://{bind_ip}:{RPC_PORTS[0]}", f"tcp://{bind_ip}:{RPC_PORTS[1]}"
 
 
+def prepare_runtime_directory(directory: Path) -> None:
+    """Keep vn.py's mutable state separate from the source checkout and other apps."""
+    directory = directory.expanduser().resolve()
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    (directory / ".vntrader").mkdir(exist_ok=True, mode=0o700)
+    os.chdir(directory)
+
+
+def get_server_status(main_engine: Any, gateway: Any) -> dict[str, Any]:
+    """Report live readiness without returning any account credentials."""
+    contracts = len(main_engine.get_all_contracts())
+    td_logged_in = bool(gateway.td_api.login_status)
+    md_logged_in = bool(gateway.md_api.login_status)
+    contracts_loaded = bool(gateway.td_api.contract_inited)
+    return {
+        "ready": td_logged_in and md_logged_in and contracts_loaded and contracts > 0,
+        "td_logged_in": td_logged_in,
+        "md_logged_in": md_logged_in,
+        "contracts_loaded": contracts_loaded,
+        "contracts": contracts,
+        "ticks": len(main_engine.get_all_ticks()),
+        "accounts": len(main_engine.get_all_accounts()),
+        "environment": "OpenCTP 7x24",
+    }
+
+
 def main() -> int:
     """Start the local trading process and its RPC endpoints."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -133,13 +172,18 @@ def main() -> int:
         return check_installation()
 
     setting = build_ctp_setting()
+    check_ctp_locale()
+    import vnpy_ctp.api
+
+    check_tts_libraries(Path(vnpy_ctp.api.__file__).parent, importlib.metadata.version("vnpy_ctp"))
     bind_ip = os.getenv("OPENCTP_RPC_BIND_IP", "127.0.0.1").strip()
     rep_address, pub_address = build_rpc_addresses(bind_ip)
+    prepare_runtime_directory(Path(os.getenv("OPENCTP_RUNTIME_DIR", "~/.local/share/vnpy-opt-setup")))
 
     from vnpy.event import EventEngine
     from vnpy.trader.engine import MainEngine
     from vnpy.trader.event import EVENT_LOG
-    from vnpy_ctp import CtpGateway
+    from scripts.openctp_gateway import OpenCtpGateway
     from vnpy_rpcservice import RpcServiceApp
     from vnpy_rpcservice.rpc_service.engine import EVENT_RPC_LOG, RpcEngine
 
@@ -147,19 +191,22 @@ def main() -> int:
     event_engine.register(EVENT_LOG, log_event)
     event_engine.register(EVENT_RPC_LOG, log_event)
     main_engine = MainEngine(event_engine)
-    main_engine.add_gateway(CtpGateway)
+    gateway = main_engine.add_gateway(OpenCtpGateway)
     rpc_engine: RpcEngine = main_engine.add_app(RpcServiceApp)
 
-    if not rpc_engine.start(rep_address, pub_address):
-        main_engine.close()
-        raise RuntimeError("Could not start RpcService")
+    def status_rpc() -> dict[str, Any]:
+        return get_server_status(main_engine, gateway)
 
-    main_engine.connect(setting, "CTP")
+    status_rpc.__name__ = "get_server_status"
+    rpc_engine.server.register(status_rpc)
     stopped = Event()
     signal.signal(signal.SIGINT, lambda *_: stopped.set())
     signal.signal(signal.SIGTERM, lambda *_: stopped.set())
-    LOGGER.info("OpenCTP gateway and RPC service started; Ctrl+C for graceful shutdown.")
     try:
+        if not rpc_engine.start(rep_address, pub_address):
+            raise RuntimeError("Could not start RpcService")
+        main_engine.connect(setting, "CTP")
+        LOGGER.info("OpenCTP gateway connecting; query get_server_status to check login readiness.")
         while not stopped.wait(1):
             pass
     finally:
